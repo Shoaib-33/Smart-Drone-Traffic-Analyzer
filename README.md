@@ -56,7 +56,7 @@ The application follows a **decoupled full-stack architecture**:
                      │  REST API (HTTP)
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│                  FastAPI Backend                         │
+│                  FastAPI Backend                        │
 │                                                         │
 │  routes/api.py   → All REST API endpoints               │
 │  routes/web.py   → Serves index.html (template route)   │
@@ -73,13 +73,13 @@ The application follows a **decoupled full-stack architecture**:
 │              CV Processing Pipeline                     │
 │                                                         │
 │  OpenCV VideoCapture                                    │
-│    → Frame Preprocessing (CLAHE + 1.5× upscale)        │
+│    → Frame Preprocessing (CLAHE + 1.5× upscale)         │
 │    → YOLOv8m Detection (car / bus / truck / motorcycle) │
 │    → ByteTrack Multi-Object Tracking                    │
 │    → LineCounter (crossing logic + anti-recount)        │
 │    → OpenCV VideoWriter (annotated output)              │
 │    → FFmpeg Re-encode (H.264, browser-compatible)       │
-│    → ReportService (CSV via pandas)    │
+│    → ReportService (CSV via pandas)                     │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -434,10 +434,3 @@ No per-frame quality assessment is performed. Preprocessing is applied to every 
 
 ---
 
-## Submission
-
-**Email:** team@antsbd.com
-
-**GitHub:** [github.com/your-username/smart-drone-traffic-analyzer](#) *(replace)*
-
-**Demo Recording:** [Loom / YouTube Link](#) *(replace)*
