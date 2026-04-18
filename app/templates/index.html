@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ARIA — Drone Traffic Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700;900&family=Barlow+Condensed:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --black:    #050810;
+  --amber:    #f5a623;
+  --amber-dim:#7a5010;
+  --amber-glow: rgba(245,166,35,0.18);
+  --green:    #39ff14;
+  --red:      #ff3b3b;
+  --white:    #e8edf5;
+  --mono: 'Share Tech Mono', monospace;
+  --head: 'Barlow Condensed', sans-serif;
+  --body: 'Barlow', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--body);
+  background: var(--black);
+  color: var(--white);
+  min-height: 100vh;
+  overflow-x: hidden;
+  cursor: crosshair;
+}
+#bgCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  opacity: 0.5;
+}
+.wrap { position: relative; z-index: 2; }
+
+.hero { min-height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; padding:0 8vw; position:relative; overflow:hidden; }
+.hud-tl,.hud-tr,.hud-bl,.hud-br { position:absolute; width:44px; height:44px; pointer-events:none; }
+.hud-tl { top:28px;left:28px; border-top:2px solid var(--amber);border-left:2px solid var(--amber); }
+.hud-tr { top:28px;right:28px; border-top:2px solid var(--amber);border-right:2px solid var(--amber); }
+.hud-bl { bottom:28px;left:28px; border-bottom:2px solid var(--amber);border-left:2px solid var(--amber); }
+.hud-br { bottom:28px;right:28px; border-bottom:2px solid var(--amber);border-right:2px solid var(--amber); }
+
+.radar-wrap { position:absolute; right:6vw; top:50%; transform:translateY(-50%); width:min(420px,40vw); aspect-ratio:1; }
+.radar { width:100%;height:100%;position:relative; }
+.radar-ring { position:absolute;inset:0;border-radius:50%; border:1px solid rgba(245,166,35,0.18); }
+.radar-ring:nth-child(2){inset:20%;border-color:rgba(245,166,35,0.24);}
+.radar-ring:nth-child(3){inset:40%;border-color:rgba(245,166,35,0.32);}
+.radar-ring:nth-child(4){inset:60%;border-color:rgba(245,166,35,0.45);}
+.radar-crosshair { position:absolute;inset:0;display:flex;align-items:center;justify-content:center; }
+.radar-crosshair::before{content:'';position:absolute;width:100%;height:1px;background:rgba(245,166,35,0.13);}
+.radar-crosshair::after{content:'';position:absolute;width:1px;height:100%;background:rgba(245,166,35,0.13);}
+.radar-sweep { position:absolute;inset:0;border-radius:50%; background:conic-gradient(from 0deg,rgba(245,166,35,0) 0deg,rgba(245,166,35,0.06) 40deg,rgba(57,255,20,0.2) 62deg,rgba(57,255,20,0) 66deg,transparent 66deg); animation:sweep 4s linear infinite; }
+@keyframes sweep { to { transform:rotate(360deg); } }
+.radar-blip { position:absolute; width:6px;height:6px;border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green),0 0 20px rgba(57,255,20,0.5); animation:blip 4s ease-in-out infinite; }
+@keyframes blip{0%,100%{opacity:0;transform:scale(.4);}40%,60%{opacity:1;transform:scale(1);}}
+.drone-hud { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%); width:40%;opacity:.32; filter:drop-shadow(0 0 14px rgba(245,166,35,0.65)); animation:dhover 7s ease-in-out infinite; }
+@keyframes dhover{0%,100%{transform:translate(-50%,-50%) translateY(0);}50%{transform:translate(-50%,-50%) translateY(-9px);}}
+
+.hero-eyebrow { font-family:var(--mono);font-size:clamp(10px,1.2vw,13px); color:var(--amber);letter-spacing:.28em;text-transform:uppercase; margin-bottom:22px;display:flex;align-items:center;gap:14px; }
+.hero-eyebrow::before{content:'//';opacity:.45;}
+.hero-title { font-family:var(--head);font-weight:900; font-size:clamp(4rem,9.5vw,11rem); line-height:.87;text-transform:uppercase;letter-spacing:-.02em; }
+.hero-title .l1{color:var(--white);display:block;}
+.hero-title .l2{display:block;color:transparent;-webkit-text-stroke:1.5px rgba(245,166,35,.6);}
+.hero-title .l3{color:var(--amber);display:block;}
+.hero-sub { font-family:var(--mono);font-size:clamp(11px,1.1vw,13px); color:rgba(232,237,245,.4);letter-spacing:.1em;margin-top:30px; max-width:460px;line-height:1.85; border-left:2px solid var(--amber-dim);padding-left:18px; }
+.hero-pills { margin-top:42px;display:flex;align-items:center;gap:20px;flex-wrap:wrap; }
+.pill { font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase; padding:9px 18px;border:1px solid;display:flex;align-items:center;gap:8px; }
+.pill.on{border-color:var(--green);color:var(--green);}
+.pill.on::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:p 1.3s ease-in-out infinite;}
+@keyframes p{0%,100%{opacity:1;}50%{opacity:.2;}}
+.pill.tech{border-color:rgba(245,166,35,.35);color:var(--amber);}
+.scroll-cue { position:absolute;bottom:36px;left:50%;transform:translateX(-50%); font-family:var(--mono);font-size:10px;color:var(--amber-dim); letter-spacing:.3em;display:flex;flex-direction:column;align-items:center;gap:10px;text-transform:uppercase; }
+.scroll-arrow{width:1px;height:52px;background:linear-gradient(to bottom,var(--amber),transparent);animation:drop 2.2s ease-in-out infinite;}
+@keyframes drop{0%{transform:scaleY(0);transform-origin:top;}50%{transform:scaleY(1);transform-origin:top;}50.01%{transform-origin:bottom;}100%{transform:scaleY(0);transform-origin:bottom;}}
+
+.op-section{padding:100px 8vw;position:relative;}
+.op-section+.op-section{border-top:1px solid rgba(255,255,255,.04);}
+.sec-label { font-family:var(--mono);font-size:11px;letter-spacing:.32em;text-transform:uppercase; color:var(--amber);margin-bottom:16px;display:flex;align-items:center;gap:12px; }
+.sec-label span{display:inline-block;width:32px;height:1px;background:var(--amber);}
+.sec-title { font-family:var(--head);font-weight:900; font-size:clamp(2.4rem,5.5vw,6rem);text-transform:uppercase; line-height:.88;letter-spacing:-.01em;margin-bottom:60px; }
+
+.upload-layout{display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:start;}
+@media(max-width:900px){.upload-layout{grid-template-columns:1fr;}}
+.dropzone { display:flex;flex-direction:column;align-items:center;justify-content:center; min-height:320px;border:1px solid rgba(245,166,35,.28); background:rgba(245,166,35,.015);cursor:pointer;position:relative; overflow:hidden;transition:all .3s; clip-path:polygon(0 0,calc(100% - 26px) 0,100% 26px,100% 100%,26px 100%,0 calc(100% - 26px)); }
+.dropzone::before { content:'';position:absolute;top:0;right:0;width:0;height:0; border-style:solid;border-width:0 32px 32px 0; border-color:transparent rgba(245,166,35,.35) transparent transparent; }
+.dropzone:hover{border-color:var(--amber);background:rgba(245,166,35,.04);box-shadow:0 0 50px rgba(245,166,35,.07),inset 0 0 40px rgba(245,166,35,.03);}
+.dropzone input{display:none;}
+.drop-icon-wrap{position:relative;margin-bottom:26px;}
+.drop-drone{width:84px;filter:drop-shadow(0 0 18px rgba(245,166,35,.55));animation:dhover 5s ease-in-out infinite;}
+.drop-ring { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%); width:80px;height:80px;border-radius:50%;border:1px solid rgba(245,166,35,.2); animation:rexp 2.2s ease-out infinite; }
+.drop-ring2 { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%); width:80px;height:80px;border-radius:50%;border:1px solid rgba(245,166,35,.1); animation:rexp 2.2s ease-out infinite .75s; }
+@keyframes rexp{0%{width:80px;height:80px;opacity:.8;}100%{width:170px;height:170px;opacity:0;}}
+.drop-title{font-family:var(--head);font-weight:700;font-size:1.5rem;letter-spacing:.08em;text-transform:uppercase;color:var(--white);margin-bottom:8px;}
+.drop-sub{font-family:var(--mono);font-size:11px;color:rgba(232,237,245,.3);letter-spacing:.15em;text-transform:uppercase;}
+.readout { font-family:var(--mono);font-size:12px;line-height:2; color:rgba(232,237,245,.38);padding:26px;border:1px solid rgba(255,255,255,.06); position:relative;margin-bottom:26px; }
+.readout::before { content:attr(data-label);position:absolute;top:-9px;left:18px; background:var(--black);padding:0 8px;font-size:10px;letter-spacing:.25em; color:var(--amber);text-transform:uppercase; }
+.rl{display:flex;justify-content:space-between;gap:24px;}
+.rv{color:var(--white);}
+.rv.ok{color:var(--green);}
+.action-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:28px;}
+.btn-p { font-family:var(--head);font-size:1rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase; padding:16px 34px;background:var(--amber);color:#180f00;border:none;cursor:pointer; clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px)); transition:all .25s;text-decoration:none;display:inline-flex;align-items:center;gap:10px; }
+.btn-p:hover:not(:disabled,.disabled-link){background:#ffbe45;box-shadow:0 0 40px rgba(245,166,35,.4);}
+.btn-p:disabled{opacity:.3;cursor:not-allowed;}
+.btn-g { font-family:var(--head);font-size:1rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase; padding:15px 34px;background:transparent;color:var(--amber); border:1px solid rgba(245,166,35,.45);cursor:pointer; clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px)); transition:all .25s;text-decoration:none;display:inline-flex;align-items:center;gap:10px; }
+.btn-g:hover:not(:disabled,.disabled-link){background:rgba(245,166,35,.07);border-color:var(--amber);}
+.btn-g:disabled{opacity:.3;cursor:not-allowed;}
+.disabled-link{opacity:.3;pointer-events:none;}
+#messageBox { margin-top:20px;font-family:var(--mono);font-size:12px;letter-spacing:.08em; padding:14px 18px;border-left:3px solid transparent;display:none; }
+#messageBox.success{border-color:var(--green);color:var(--green);background:rgba(57,255,20,.04);display:block;}
+#messageBox.error{border-color:var(--red);color:var(--red);background:rgba(255,59,59,.04);display:block;}
+#selectedFile{margin-top:16px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--amber);padding:10px 14px;border-left:2px solid var(--amber-dim);}
+#selectedFile.hidden{display:none;}
+
+.video-layout{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;}
+@media(max-width:900px){.video-layout{grid-template-columns:1fr;}}
+.vid-label{font-family:var(--mono);font-size:10px;letter-spacing:.28em;color:var(--amber);text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:10px;}
+.vid-label::before{content:'▶';font-size:8px;}
+.vid-frame{position:relative;border:1px solid rgba(245,166,35,.22);}
+.vid-frame::before,.vid-frame::after{content:'';position:absolute;z-index:2;pointer-events:none;left:0;right:0;}
+.vid-frame::before{top:0;height:2px;background:linear-gradient(90deg,var(--amber),transparent,var(--amber));}
+.vid-frame::after{bottom:0;height:2px;background:linear-gradient(90deg,transparent,var(--amber),transparent);}
+.video-player{width:100%;display:block;background:#000;max-height:380px;}
+.video-player.hidden{display:none;}
+.placeholder { min-height:280px;display:flex;align-items:center;justify-content:center; background:rgba(245,166,35,.012);color:rgba(245,166,35,.28); font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase; flex-direction:column;gap:14px; }
+
+.progress-section { padding:80px 8vw;border-top:1px solid rgba(255,255,255,.04);position:relative;overflow:hidden; }
+.progress-giant{display:flex;align-items:flex-end;gap:40px;margin-bottom:44px;flex-wrap:wrap;}
+.progress-pct { font-family:var(--head);font-size:clamp(5rem,16vw,15rem);font-weight:900; line-height:.84;letter-spacing:-.04em;color:transparent; -webkit-text-stroke:1.5px rgba(245,166,35,.45);position:relative;user-select:none; }
+.pct-fill { position:absolute;inset:0;color:var(--amber);overflow:hidden;-webkit-text-stroke:0; clip-path:inset(0 100% 0 0);transition:clip-path .45s cubic-bezier(.4,0,.2,1); }
+.progress-info{padding-bottom:14px;}
+#statusLabel { font-family:var(--head);font-size:clamp(1.8rem,4.5vw,4rem);font-weight:900; text-transform:uppercase;letter-spacing:.05em;color:var(--white);display:block; }
+.prog-note{font-family:var(--mono);font-size:12px;color:rgba(232,237,245,.25);letter-spacing:.14em;margin-top:10px;}
+.progress-bar-wrap{position:relative;}
+.prog-bar-label{font-family:var(--mono);font-size:10px;letter-spacing:.28em;color:var(--amber-dim);text-transform:uppercase;margin-bottom:10px;}
+.prog-track{height:3px;background:rgba(245,166,35,.1);position:relative;overflow:visible;}
+.progress-fill { height:100%;width:0%;background:var(--amber); box-shadow:0 0 18px rgba(245,166,35,.65); transition:width .42s cubic-bezier(.4,0,.2,1);position:relative; }
+.progress-fill::after { content:'';position:absolute;right:-1px;top:-5px;width:3px;height:13px; background:#fff;box-shadow:0 0 10px var(--amber); }
+#progressText{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:.18em;margin-top:10px;display:block;}
+
+.stats-strip{display:flex;border:1px solid rgba(245,166,35,.14);overflow:hidden;}
+.stat-item{flex:1;padding:34px 28px;border-right:1px solid rgba(245,166,35,.09);position:relative;transition:background .3s;}
+.stat-item:last-child{border-right:none;}
+.stat-item:hover{background:rgba(245,166,35,.03);}
+.s-label{font-family:var(--mono);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:rgba(245,166,35,.45);margin-bottom:16px;display:block;}
+.s-num{font-family:var(--head);font-size:clamp(2rem,4vw,4.2rem);font-weight:900;color:var(--white);line-height:1;display:block;}
+.stat-item.total .s-num{color:var(--amber);}
+@media(max-width:900px){.stats-strip{flex-wrap:wrap;}.stat-item{flex-basis:50%;border-bottom:1px solid rgba(245,166,35,.09);}}
+@media(max-width:500px){.stat-item{flex-basis:100%;}}
+
+.table-section{padding:80px 8vw;border-top:1px solid rgba(255,255,255,.04);}
+.table-scroll{overflow:auto;max-height:560px;border:1px solid rgba(245,166,35,.13);margin-top:0;}
+table{width:100%;border-collapse:collapse;}
+thead{position:sticky;top:0;z-index:3;}
+th { background:rgba(5,8,16,.98);backdrop-filter:blur(8px); padding:13px 18px;font-family:var(--mono);font-size:10px;letter-spacing:.2em; text-transform:uppercase;color:rgba(245,166,35,.55);border-bottom:1px solid rgba(245,166,35,.18);text-align:left;white-space:nowrap; }
+td{padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.04);font-family:var(--mono);font-size:12px;color:rgba(232,237,245,.65);white-space:nowrap;}
+tr:hover td{background:rgba(245,166,35,.02);color:var(--white);}
+.empty-cell{text-align:center;color:rgba(245,166,35,.22);padding:60px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;}
+
+.dl-section { padding:80px 8vw;border-top:1px solid rgba(255,255,255,.04); display:flex;align-items:center;gap:40px;flex-wrap:wrap; }
+.dl-title{font-family:var(--head);font-size:clamp(2.2rem,5.5vw,5.5rem);font-weight:900;text-transform:uppercase;line-height:.88;color:var(--white);flex:1;min-width:260px;}
+.dl-title em{color:var(--amber);font-style:normal;display:block;}
+.dl-btns{display:flex;gap:14px;flex-wrap:wrap;}
+
+footer { padding:36px 8vw;border-top:1px solid rgba(255,255,255,.04); display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px; }
+.f-brand{font-family:var(--head);font-size:1.35rem;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:var(--amber);}
+.f-copy{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:rgba(232,237,245,.18);}
+
+.hidden{display:none!important;}
+.fade-up{opacity:0;transform:translateY(28px);transition:opacity .65s ease,transform .65s ease;}
+.fade-up.visible{opacity:1;transform:translateY(0);}
+</style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<div class="wrap">
+
+<section class="hero">
+  <div class="hud-tl"></div><div class="hud-tr"></div>
+  <div class="hud-bl"></div><div class="hud-br"></div>
+  <p class="hero-eyebrow">ANTS Technical Assessment &nbsp;·&nbsp; ARIA v2.1</p>
+  <h1 class="hero-title">
+    <span class="l1">Smart</span>
+    <span class="l2">Drone</span>
+    <span class="l3">Traffic.</span>
+  </h1>
+  <p class="hero-sub">Upload aerial footage → Process with YOLO + ByteTrack<br>→ Annotated output + CSV intelligence report</p>
+  <div class="hero-pills">
+    <div class="pill on">System Online</div>
+    <div class="pill tech">FastAPI · YOLO · ByteTrack</div>
+  </div>
+  <div class="radar-wrap">
+    <div class="radar">
+      <div class="radar-ring"></div><div class="radar-ring"></div>
+      <div class="radar-ring"></div><div class="radar-ring"></div>
+      <div class="radar-crosshair"></div>
+      <div class="radar-sweep"></div>
+      <svg class="drone-hud" viewBox="0 0 200 120" fill="none">
+        <rect x="72" y="44" width="56" height="32" rx="6" stroke="#f5a623" stroke-width="1.2"/>
+        <line x1="72" y1="60" x2="30" y2="28" stroke="#f5a623" stroke-width="1"/>
+        <line x1="128" y1="60" x2="170" y2="28" stroke="#f5a623" stroke-width="1"/>
+        <line x1="72" y1="60" x2="30" y2="92" stroke="#f5a623" stroke-width="1"/>
+        <line x1="128" y1="60" x2="170" y2="92" stroke="#f5a623" stroke-width="1"/>
+        <ellipse cx="30" cy="28" rx="20" ry="6" stroke="#f5a623" stroke-width="1.2"/>
+        <ellipse cx="170" cy="28" rx="20" ry="6" stroke="#f5a623" stroke-width="1.2"/>
+        <ellipse cx="30" cy="92" rx="20" ry="6" stroke="#f5a623" stroke-width="1.2"/>
+        <ellipse cx="170" cy="92" rx="20" ry="6" stroke="#f5a623" stroke-width="1.2"/>
+        <circle cx="30" cy="28" r="3" fill="#f5a623"/><circle cx="170" cy="28" r="3" fill="#f5a623"/>
+        <circle cx="30" cy="92" r="3" fill="#f5a623"/><circle cx="170" cy="92" r="3" fill="#f5a623"/>
+        <ellipse cx="100" cy="66" rx="10" ry="7" stroke="#f5a623" stroke-width="1" opacity=".6"/>
+        <line x1="85" y1="76" x2="80" y2="92" stroke="#f5a623" stroke-width="1"/>
+        <line x1="115" y1="76" x2="120" y2="92" stroke="#f5a623" stroke-width="1"/>
+        <line x1="74" y1="92" x2="126" y2="92" stroke="#f5a623" stroke-width="1.5"/>
+      </svg>
+      <div class="radar-blip" style="top:22%;left:64%;animation-delay:0s"></div>
+      <div class="radar-blip" style="top:70%;left:30%;animation-delay:1.3s;background:#39ff14;box-shadow:0 0 8px #39ff14,0 0 20px rgba(57,255,20,.5)"></div>
+      <div class="radar-blip" style="top:38%;left:20%;animation-delay:2.6s"></div>
+      <div class="radar-blip" style="top:62%;left:74%;animation-delay:.9s;background:#39ff14;box-shadow:0 0 8px #39ff14"></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><span>Scroll</span><div class="scroll-arrow"></div></div>
+</section>
+
+<section class="op-section fade-up">
+  <p class="sec-label"><span></span>Mission Upload</p>
+  <h2 class="sec-title">Deploy<br>Your Footage</h2>
+  <div class="upload-layout">
+    <div>
+      <label class="dropzone" for="videoFile">
+        <input id="videoFile" type="file" accept="video/*"/>
+        <div class="drop-icon-wrap">
+          <svg class="drop-drone" viewBox="0 0 200 120" fill="none">
+            <rect x="72" y="44" width="56" height="32" rx="6" stroke="#f5a623" stroke-width="1.5"/>
+            <line x1="72" y1="60" x2="30" y2="28" stroke="#f5a623" stroke-width="1.2"/>
+            <line x1="128" y1="60" x2="170" y2="28" stroke="#f5a623" stroke-width="1.2"/>
+            <line x1="72" y1="60" x2="30" y2="92" stroke="#f5a623" stroke-width="1.2"/>
+            <line x1="128" y1="60" x2="170" y2="92" stroke="#f5a623" stroke-width="1.2"/>
+            <ellipse cx="30" cy="28" rx="20" ry="6" stroke="#f5a623" stroke-width="1.5"/>
+            <ellipse cx="170" cy="28" rx="20" ry="6" stroke="#f5a623" stroke-width="1.5"/>
+            <ellipse cx="30" cy="92" rx="20" ry="6" stroke="#f5a623" stroke-width="1.5"/>
+            <ellipse cx="170" cy="92" rx="20" ry="6" stroke="#f5a623" stroke-width="1.5"/>
+            <circle cx="30" cy="28" r="4" fill="#f5a623"/><circle cx="170" cy="28" r="4" fill="#f5a623"/>
+            <circle cx="30" cy="92" r="4" fill="#f5a623"/><circle cx="170" cy="92" r="4" fill="#f5a623"/>
+            <ellipse cx="100" cy="66" rx="10" ry="7" stroke="#f5a623" stroke-width="1.2"/>
+            <line x1="85" y1="76" x2="80" y2="92" stroke="#f5a623" stroke-width="1.2"/>
+            <line x1="115" y1="76" x2="120" y2="92" stroke="#f5a623" stroke-width="1.2"/>
+            <line x1="74" y1="92" x2="126" y2="92" stroke="#f5a623" stroke-width="2"/>
+          </svg>
+          <div class="drop-ring"></div><div class="drop-ring2"></div>
+        </div>
+        <span class="drop-title">Drop Video File</span>
+        <span class="drop-sub">.mp4 · .mov · .avi · .mkv</span>
+      </label>
+      <div id="selectedFile" class="hidden"></div>
+      <div id="messageBox"></div>
+      <div class="action-row">
+        <button id="uploadBtn" class="btn-p">⬆ Upload</button>
+        <button id="processBtn" class="btn-g" disabled>▶ Start Processing</button>
+      </div>
+    </div>
+    <div>
+      <div class="readout" data-label="System Specs">
+        <div class="rl"><span>Model</span><span class="rv">YOLO v8</span></div>
+        <div class="rl"><span>Tracker</span><span class="rv">ByteTrack</span></div>
+        <div class="rl"><span>Backend</span><span class="rv">FastAPI</span></div>
+        <div class="rl"><span>Status</span><span class="rv ok">ONLINE</span></div>
+        <div class="rl"><span>Formats</span><span class="rv">MP4 / MOV / AVI / MKV</span></div>
+      </div>
+      <div class="readout" data-label="Mission Log">
+        <div class="rl"><span>Upload</span><span class="rv" id="logUpload">—</span></div>
+        <div class="rl"><span>Job ID</span><span class="rv" id="logJobId">—</span></div>
+        <div class="rl"><span>Processing</span><span class="rv" id="logProcessing">STANDBY</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="op-section fade-up" style="border-top:1px solid rgba(255,255,255,.04);">
+  <p class="sec-label"><span></span>Feed Review</p>
+  <h2 class="sec-title">Visual<br>Inspection</h2>
+  <div class="video-layout">
+    <div>
+      <p class="vid-label">Raw Input Feed</p>
+      <div class="vid-frame">
+        <video id="uploadedVideo" controls class="video-player hidden"></video>
+        <div id="placeholderPreview" class="placeholder">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style="opacity:.4"><circle cx="16" cy="16" r="14" stroke="#f5a623" stroke-width="1.2"/><circle cx="16" cy="16" r="8" stroke="#f5a623" stroke-width="1"/><circle cx="16" cy="16" r="3" fill="#f5a623"/></svg>
+          <span>Awaiting Upload</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="vid-label">Annotated Output Feed</p>
+      <div class="vid-frame">
+        <video id="processedVideo" controls class="video-player hidden"></video>
+        <div id="placeholderProcessed" class="placeholder">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style="opacity:.4"><rect x="4" y="8" width="24" height="16" rx="3" stroke="#f5a623" stroke-width="1.2"/><circle cx="16" cy="16" r="4" stroke="#f5a623" stroke-width="1"/><line x1="4" y1="8" x2="28" y2="24" stroke="#f5a623" stroke-width=".8"/></svg>
+          <span>Awaiting Processing</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="progress-section fade-up">
+  <p class="sec-label"><span></span>Processing Engine</p>
+  <div class="progress-giant">
+    <div class="progress-pct">
+      <span id="progressOutline">00</span>
+      <span class="pct-fill" id="progressFillNum">00</span>
+    </div>
+    <div class="progress-info">
+      <span id="statusLabel">Idle</span>
+      <p class="prog-note">// Backend polling: 2s interval<br>// YOLO + ByteTrack pipeline active</p>
+    </div>
+  </div>
+  <div class="progress-bar-wrap">
+    <p class="prog-bar-label">Processing Progress</p>
+    <div class="prog-track">
+      <div id="progressFill" class="progress-fill"></div>
+    </div>
+    <span id="progressText">0%</span>
+  </div>
+</section>
+
+<section class="op-section fade-up" style="border-top:1px solid rgba(255,255,255,.04);">
+  <p class="sec-label"><span></span>Intelligence Summary</p>
+  <h2 class="sec-title">Vehicle<br>Counts</h2>
+  <div class="stats-strip">
+    <div class="stat-item total"><span class="s-label">Total Detected</span><span class="s-num" id="totalCount">—</span></div>
+    <div class="stat-item"><span class="s-label">Cars</span><span class="s-num" id="carsCount">—</span></div>
+    <div class="stat-item"><span class="s-label">Buses</span><span class="s-num" id="busesCount">—</span></div>
+    <div class="stat-item"><span class="s-label">Trucks</span><span class="s-num" id="trucksCount">—</span></div>
+    <div class="stat-item"><span class="s-label">Motorcycles</span><span class="s-num" id="motorcyclesCount">—</span></div>
+    <div class="stat-item"><span class="s-label">Duration</span><span class="s-num" id="durationValue">—</span></div>
+  </div>
+</section>
+
+<section class="table-section fade-up">
+  <p class="sec-label"><span></span>Detection Log</p>
+  <h2 class="sec-title">Event<br>Records</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th><th>Type</th><th>Crossed</th><th>First Frame</th>
+          <th>First Time</th><th>✓ Frame</th><th>✓ Time</th><th>Last Frame</th><th>Last Time</th>
+        </tr>
+      </thead>
+      <tbody id="resultsTableBody">
+        <tr><td colspan="9" class="empty-cell">// No detection data — awaiting mission completion</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="dl-section fade-up">
+  <div class="dl-title">Export<br><em>Report.</em></div>
+  <div class="dl-btns">
+    <a id="downloadCsvBtn" class="btn-p disabled-link" href="#">⬇ CSV Report</a>
+  </div>
+</section>
+
+<footer>
+  <span class="f-brand">ARIA · Drone Intelligence</span>
+  <span class="f-copy">ANTS Technical Assessment · FastAPI + YOLO + ByteTrack</span>
+</footer>
+</div>
+
+<script src="/static/app.js?v=2"></script>
+<script>
+(function(){
+  const c=document.getElementById('bgCanvas'),ctx=c.getContext('2d');
+  let W,H,stars=[];
+  function resize(){W=c.width=window.innerWidth;H=c.height=window.innerHeight;}
+  resize(); window.addEventListener('resize',resize);
+  for(let i=0;i<130;i++) stars.push({x:Math.random()*3000,y:Math.random()*2000,r:Math.random()*1.3+.2,a:Math.random()*Math.PI*2,sp:Math.random()*.004+.001});
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    const g=ctx.createRadialGradient(W/2,H*.28,0,W/2,H*.28,Math.max(W,H)*.85);
+    g.addColorStop(0,'rgba(12,18,48,.97)');g.addColorStop(1,'rgba(5,8,16,.99)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    stars.forEach(s=>{
+      s.a+=s.sp;
+      const al=(Math.sin(s.a)+1)/2*.45+.08;
+      ctx.beginPath();ctx.arc(s.x%W,s.y%H,s.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(232,237,245,${al})`;ctx.fill();
+    });
+    const hg=ctx.createLinearGradient(0,H*.65,0,H);
+    hg.addColorStop(0,'rgba(245,166,35,.025)');hg.addColorStop(1,'transparent');
+    ctx.fillStyle=hg;ctx.fillRect(0,H*.65,W,H*.35);
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+(function(){
+  const els=document.querySelectorAll('.fade-up');
+  const io=new IntersectionObserver(entries=>{
+    entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');io.unobserve(e.target);}});
+  },{threshold:.1});
+  els.forEach(el=>io.observe(el));
+})();
+(function(){
+  const fill=document.getElementById('progressFill');
+  const fillNum=document.getElementById('progressFillNum');
+  const outline=document.getElementById('progressOutline');
+  if(!fill) return;
+  new MutationObserver(()=>{
+    const pct=parseInt(fill.style.width)||0;
+    const s=String(pct).padStart(2,'0');
+    if(outline) outline.textContent=s;
+    if(fillNum){ fillNum.textContent=s; fillNum.style.clipPath=`inset(0 ${100-pct}% 0 0)`; }
+  }).observe(fill,{attributes:true,attributeFilter:['style']});
+})();
+(function(){
+  const sl=document.getElementById('statusLabel');
+  if(!sl) return;
+  new MutationObserver(()=>{
+    const lp=document.getElementById('logProcessing');
+    if(lp) lp.textContent=sl.textContent.toUpperCase();
+  }).observe(sl,{childList:true,characterData:true,subtree:true});
+})();
+</script>
+</body>
+</html>
